@@ -104,7 +104,10 @@ class CanSnifferGUI:
             "All Subsystems",
             "VCU (Vehicle Control)",
             "Inverter / Motor",
-            "BMS (Accumulator)",
+            "BMS",
+            "ACU",
+            "CB DL (Control Box Datalogger)",
+            "Aero DL (Aero Datalogger)",
             "General Telemetry",
         ],
         width=20,
@@ -380,37 +383,34 @@ class CanSnifferGUI:
       self.check_and_insert_tree(record)
 
   def decode_can_frame(self, can_id_str, data):
-    try:
-      can_id = int(can_id_str, 16)
-    except ValueError:
-      return "Unknown", "Format Error"
+      try:
+          if can_id_str.startswith("0x") or can_id_str.startswith("0X"):
+              can_id = int(can_id_str, 16)
+          else:
+              can_id = int(can_id_str)
+      except ValueError:
+          return "Unknown", "Format Error"
 
-    if 0x101 <= can_id <= 0x10F:
-      return (
-          "VCU (Vehicle Control)",
-          (
-              f"Throttle: {data[0] if len(data) > 0 else 0}%, Brakes:"
-              f" {data[1] if len(data) > 1 else 0}%"
-          ),
-      )
-    elif 0x200 <= can_id <= 0x205:
-      return (
-          "Inverter / Motor",
-          (
-              f"Temperature: {data[2] if len(data) > 2 else 0} °C, Current:"
-              f" {data[3] if len(data) > 3 else 0} A"
-          ),
-      )
-    elif 0x300 <= can_id <= 0x310:
-      return (
-          "BMS (Accumulator)",
-          (
-              f"Max Cell V: {data[0] if len(data) > 0 else 0}, Pack SoC:"
-              f" {data[2] if len(data) > 2 else 0}%"
-          ),
-      )
-    else:
-      return "General Telemetry", f"Payload: {' '.join([str(b) for b in data])}"
+      if can_id == 0x350:
+          brake = data[0] if len(data) > 0 else 0
+          accel = data[1] if len(data) > 1 else 0
+          return "VCU (Vehicle Control)", f"Brake Pedal: {brake}%, Accel Pedal: {accel}%"
+
+      elif can_id == 0x181:
+          val_id = data[0] if len(data) > 0 else 0
+          return "Inverter / Motor", f"Value ID: {val_id}, Payload: {' '.join([f'0x{b:02X}' for b in data])}"
+
+      elif can_id == 0x300 or (0x521 <= can_id <= 0x528) or (0x700 <= can_id <= 0x701):
+          return "BMS / ACU (Accumulator)", f"Accumulator Data: {' '.join([f'0x{b:02X}' for b in data])}"
+
+      elif can_id == 0x400 or 0x450 <= can_id <= 0x451 or can_id == 0x650:
+          return "CB DL (Control Box Datalogger)", f"CB DL Payload: {' '.join([f'0x{b:02X}' for b in data])}"
+
+      elif 0x601 <= can_id <= 0x603:
+          return "Aero DL (Aero Datalogger)", f"Aero Sensor Data: {' '.join([f'0x{b:02X}' for b in data])}"
+
+      else:
+          return "General Telemetry", f"Payload: {' '.join([str(b) for b in data])}"
 
   def clear_table(self):
     self.root.update_idletasks()
